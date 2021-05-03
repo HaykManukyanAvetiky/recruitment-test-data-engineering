@@ -1,7 +1,0 @@
-{
-  "dependencies": {
-    "csv": "^5.4.0",
-    "mysql2": "^2.2.5",
-    "sequelize": "^6.6.1"
-  }
-}
