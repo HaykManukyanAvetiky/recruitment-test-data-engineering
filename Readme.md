@@ -1,4 +1,4 @@
-to run script use docker-compose run load data*
+to run script use docker-compose run load_data*
 # Code test for data engineering candidates
 
 ## Purpose
