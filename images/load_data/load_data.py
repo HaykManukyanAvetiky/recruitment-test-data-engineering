@@ -4,20 +4,22 @@
 import csv
 import json
 import pandas as pd
+import logging
+import configs as c
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Identity, ForeignKey, Date
 
-print('Starting...........')
+logging.getLogger().setLevel(c.LOG_LEVEL)
 
-connect_alchemy = "mysql+mysqlconnector://codetest:swordfish@database/codetest?charset=utf8" 
-# connect_alchemy = "mysql+mysqlconnector://root:12345678@localhost/app2?charset=utf8" 
+logging.info('Starting...........')
+
 
 try:
-    print('Connecting to the MySQL...........')
-    engine = create_engine(connect_alchemy)
-    print("Connection successfully..................")
+    logging.info('Connecting to the MySQL...........')
+    engine = create_engine(c.CONNECT_DOCK)
+    logging.info("Connection successfully..................")
 except Exception as err:
-    print("Error while connecting to MySQL:", err)      
-    exit()
+    logging.exception("Error while creating engine")      
+    
 
 # defining structure
 meta = MetaData()
@@ -50,21 +52,21 @@ TPeople = Table(
    Column('date_of_birth', Date()),
    Column('birth_city_id', Integer, ForeignKey('cities.city_id'))
 )
-print('Structure defined ...')
+logging.info('Structure defined ...')
 # dropping structure if exists
 TPeople.drop(bind=engine, checkfirst=True)
 TCities.drop(bind=engine, checkfirst=True)
 TRegions.drop(bind=engine, checkfirst=True)
 Tcountries.drop(bind=engine, checkfirst=True)
 
-print('old structure dropped .....')
+logging.info('old structure dropped .....')
 
 # Creating structure
 meta.create_all(engine)
-print('new structure created ....')
+logging.info('new structure created ....')
 
-# normalizing
-places = pd.read_csv('/data/places.csv')
+# normalizing and reading
+places = pd.read_csv(c.PLACES_FILE, encoding=c.ENCODING)
 
 regions = places[['region','country']].drop_duplicates().reset_index()
 regions.columns = ['region_id','region_name','country_name']
@@ -77,13 +79,14 @@ cities.columns = TCities.columns.keys()  #final
 cities.city_id += 1
 regions = regions.merge(countries, on= 'country_name')[TRegions.columns.keys()] #final
 
-people = pd.read_csv('/data/people.csv', encoding="utf-8")
+people = pd.read_csv(c.PEOPLE_FILE , encoding=c.ENCODING)
+people = people.drop_duplicates()
 people = people.merge(cities,left_on='place_of_birth', right_on='city_name')\
     .reset_index()[['index','given_name','family_name','date_of_birth','city_id']] # 
 people.columns=TPeople.columns.keys()  #final
 people.id += 1
 
-print('data normalized ....')
+logging.info('data normalized ....')
 
 # loading Data
 
@@ -92,18 +95,17 @@ regions.to_sql(TRegions.fullname, con=engine, if_exists='append', index=False)
 cities.to_sql(TCities.fullname, con=engine, if_exists='append', index=False)
 people.to_sql(TPeople.fullname, con=engine, if_exists='append', index=False)
 
-print('data loaded .....')
+logging.info('data loaded .....')
 # exstracting data
-with open('/data/output.json','w') as file:
+
+with open(c.SQL_FILE) as file:
+    sql = file.read()
+
+with open(c.OUTOUT_FILE,'w') as file:
     with engine.connect() as con:
-        sql = """select p.given_name, p.family_name, DATE_FORMAT(p.date_of_birth,"%%Y-%%m-%%d") date_of_birth, c.city_name birth_city, 
-                    r.region_name birth_region, co.country_name birth_country 
-                    FROM people p
-                    join cities c on c.city_id = p.Birth_city_id
-                    join regions r on r.region_id = c.region_id
-                    join countries co on co.country_id = r.country_id
-                    order by 1
-        """ 
+        
         rs = con.execute(sql)     
 
     json.dump([row._asdict() for row in rs], file, separators=(',', ':'))
+
+logging.info('data extracted and saved .. .. ')
